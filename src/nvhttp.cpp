@@ -111,8 +111,13 @@ namespace nvhttp {
   } conf_intern;
 
   struct client_t {
+    std::string fbProfile;
+    std::string cert;
+  };
+
+  struct application_t {
     std::string uniqueID;
-    std::vector<std::string> certs;
+    std::vector<client_t> clients;
   };
 
   struct pair_session_t {
@@ -138,7 +143,7 @@ namespace nvhttp {
 
   // uniqueID, session
   std::unordered_map<std::string, pair_session_t> map_id_sess;
-  std::unordered_map<std::string, client_t> map_id_client;
+  std::unordered_map<std::string, application_t> map_id_applications;
 
   using args_t = SimpleWeb::CaseInsensitiveMultimap;
   using resp_https_t = std::shared_ptr<typename SimpleWeb::ServerBase<SimpleWeb::HTTPS>::Response>;
@@ -177,21 +182,19 @@ namespace nvhttp {
     root.erase("root"s);
 
     root.put("root.uniqueid", http::unique_id);
-    auto &nodes = root.add_child("root.devices", pt::ptree {});
-    for (auto &[_, client] : map_id_client) {
-      pt::ptree node;
+    auto &applications = root.add_child("root.applications", pt::ptree {});
+    for (auto &[_, application] : map_id_applications) {
+      pt::ptree application_node;
 
-      node.put("uniqueid"s, client.uniqueID);
-
-      pt::ptree cert_nodes;
-      for (auto &cert : client.certs) {
-        pt::ptree cert_node;
-        cert_node.put_value(cert);
-        cert_nodes.push_back(std::make_pair(""s, cert_node));
+      application_node.put("uniqueid"s, application.uniqueID);
+      auto &clients_node = application_node.add_child("clients"s, pt::ptree {});
+      for (auto &client : application.clients) {
+        pt::ptree client_node;
+        client_node.put("cert"s, client.cert);
+        clients_node.push_back(std::make_pair(""s, client_node));
       }
-      node.add_child("certs"s, cert_nodes);
-
-      nodes.push_back(std::make_pair(""s, node));
+      
+      applications.push_back(std::make_pair(""s, application_node));
     }
 
     try {
@@ -229,30 +232,32 @@ namespace nvhttp {
     }
     http::unique_id = std::move(*unique_id_p);
 
-    auto device_nodes = root.get_child("root.devices");
+    auto device_nodes = root.get_child("root.applications");
 
     for (auto &[_, device_node] : device_nodes) {
       auto uniqID = device_node.get<std::string>("uniqueid");
-      auto &client = map_id_client.emplace(uniqID, client_t {}).first->second;
+      auto &application = map_id_applications.emplace(uniqID, application_t {}).first->second;
 
-      client.uniqueID = uniqID;
+      application.uniqueID = uniqID;
 
-      for (auto &[_, el] : device_node.get_child("certs")) {
-        client.certs.emplace_back(el.get_value<std::string>());
+      for (auto &[_, client_node] : device_node.get_child("clients")) {
+        client_t client;
+        client.cert = client_node.get<std::string>("cert");
+        application.clients.emplace_back(client);
       }
     }
   }
 
   void
-  update_id_client(const std::string &uniqueID, std::string &&cert, op_e op) {
+  update_id_client(const std::string &uniqueID, client_t &&client, op_e op) {
     switch (op) {
       case op_e::ADD: {
-        auto &client = map_id_client[uniqueID];
-        client.certs.emplace_back(std::move(cert));
-        client.uniqueID = uniqueID;
+        auto &application = map_id_applications[uniqueID];
+        application.clients.emplace_back(std::move(client));
+        application.uniqueID = uniqueID;
       } break;
       case op_e::REMOVE:
-        map_id_client.erase(uniqueID);
+        map_id_applications.erase(uniqueID);
         break;
     }
 
@@ -383,7 +388,9 @@ namespace nvhttp {
 
       auto it = map_id_sess.find(client.uniqueID);
 
-      update_id_client(client.uniqueID, std::move(client.cert), op_e::ADD);
+      client_t client_node;
+      client_node.cert = client.cert;
+      update_id_client(client.uniqueID, std::move(client_node), op_e::ADD);
       map_id_sess.erase(it);
     }
     else {
@@ -459,6 +466,7 @@ namespace nvhttp {
       std::ostringstream data;
 
       pt::write_xml(data, tree);
+      BOOST_LOG(debug) << "PAIR XML ::" << data.str();
       response->write(data.str());
       response->close_connection_after_response = true;
     });
@@ -600,7 +608,7 @@ namespace nvhttp {
       auto clientID = args.find("uniqueid"s);
 
       if (clientID != std::end(args)) {
-        if (auto it = map_id_client.find(clientID->second); it != std::end(map_id_client)) {
+        if (auto it = map_id_applications.find(clientID->second); it != std::end(map_id_applications)) {
           pair_status = 1;
         }
       }
@@ -917,9 +925,9 @@ namespace nvhttp {
     conf_intern.servercert = read_file(config::nvhttp.cert.c_str());
 
     crypto::cert_chain_t cert_chain;
-    for (auto &[_, client] : map_id_client) {
-      for (auto &cert : client.certs) {
-        cert_chain.add(crypto::x509(cert));
+    for (auto &[_, application] : map_id_applications) {
+      for (auto &client : application.clients) {
+        cert_chain.add(crypto::x509(client.cert));
       }
     }
 
@@ -935,6 +943,16 @@ namespace nvhttp {
     // Verify certificates after establishing connection
     https_server.verify = [&cert_chain, add_cert](SSL *ssl) {
       crypto::x509_t x509 { SSL_get_peer_certificate(ssl) };
+
+      X509* cert = x509.get();
+      BIO* bio = BIO_new(BIO_s_mem());
+      PEM_write_bio_X509(bio, cert);
+      char* buffer;
+      long length = BIO_get_mem_data(bio, &buffer);
+      std::string pemStr(buffer, length);
+      BOOST_LOG(debug) << "CERT ::" << pemStr;
+      BIO_free(bio);
+
       if (!x509) {
         BOOST_LOG(info) << "unknown -- denied"sv;
         return 0;
@@ -1048,7 +1066,7 @@ namespace nvhttp {
    */
   void
   erase_all_clients() {
-    map_id_client.clear();
+    map_id_applications.clear();
     save_state();
   }
 }  // namespace nvhttp
