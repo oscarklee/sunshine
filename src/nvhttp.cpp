@@ -111,7 +111,8 @@ namespace nvhttp {
   } conf_intern;
 
   struct client_t {
-    std::string fbProfile;
+    std::string fbp;
+    std::int16_t seconds;
     std::string cert;
   };
 
@@ -122,6 +123,7 @@ namespace nvhttp {
 
   struct pair_session_t {
     struct {
+      std::string fbp;
       std::string uniqueID;
       std::string cert;
     } client;
@@ -191,6 +193,8 @@ namespace nvhttp {
       for (auto &client : application.clients) {
         pt::ptree client_node;
         client_node.put("cert"s, client.cert);
+        client_node.put("fbp", client.fbp);
+        client_node.put("seconds"s, client.seconds);
         clients_node.push_back(std::make_pair(""s, client_node));
       }
       
@@ -243,6 +247,8 @@ namespace nvhttp {
       for (auto &[_, client_node] : device_node.get_child("clients")) {
         client_t client;
         client.cert = client_node.get<std::string>("cert");
+        client.fbp = client_node.get<std::string>("fbp");
+        client.seconds = client_node.get<std::int16_t>("seconds");
         application.clients.emplace_back(client);
       }
     }
@@ -296,6 +302,7 @@ namespace nvhttp {
 
     auto key = crypto::gen_aes_key(salt, pin);
     sess.cipher_key = std::make_unique<crypto::aes_t>(key);
+    sess.client.fbp = "todo-facebook-profile"; // TODO: set the facebook profile in session client.
 
     tree.put("root.paired", 1);
     tree.put("root.plaincert", util::hex_vec(conf_intern.servercert, true));
@@ -389,7 +396,9 @@ namespace nvhttp {
       auto it = map_id_sess.find(client.uniqueID);
 
       client_t client_node;
+      client_node.seconds = DEFAULT_INITIAL_SECONDS;
       client_node.cert = client.cert;
+      client_node.fbp = client.fbp;
       update_id_client(client.uniqueID, std::move(client_node), op_e::ADD);
       map_id_sess.erase(it);
     }
@@ -466,7 +475,6 @@ namespace nvhttp {
       std::ostringstream data;
 
       pt::write_xml(data, tree);
-      BOOST_LOG(debug) << "PAIR XML ::" << data.str();
       response->write(data.str());
       response->close_connection_after_response = true;
     });
@@ -489,8 +497,6 @@ namespace nvhttp {
 
         sess.client.uniqueID = std::move(uniqID);
         sess.client.cert = util::from_hex_vec(get_arg(args, "clientcert"), true);
-
-        BOOST_LOG(debug) << sess.client.cert;
         auto ptr = map_id_sess.emplace(sess.client.uniqueID, std::move(sess)).first;
 
         ptr->second.async_insert_pin.salt = std::move(get_arg(args, "salt"));

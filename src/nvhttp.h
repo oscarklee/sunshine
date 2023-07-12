@@ -39,6 +39,11 @@ namespace nvhttp {
    */
   constexpr auto PORT_HTTPS = -5;
 
+  /**
+   * @brief Default free seconds for new profiles.
+  */
+  constexpr auto DEFAULT_INITIAL_SECONDS = 3600;
+
   // functions
   void
   start();
