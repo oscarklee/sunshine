@@ -509,6 +509,7 @@ set(SUNSHINE_TARGET_FILES
         src/crypto.h
         src/nvhttp.cpp
         src/nvhttp.h
+        src/sunshinehttp.h
         src/httpcommon.cpp
         src/httpcommon.h
         src/confighttp.cpp

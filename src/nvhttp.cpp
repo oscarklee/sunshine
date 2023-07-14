@@ -10,8 +10,6 @@
 #include <filesystem>
 
 // lib includes
-#include <Simple-Web-Server/server_http.hpp>
-#include <Simple-Web-Server/server_https.hpp>
 #include <boost/asio/ssl/context.hpp>
 #include <boost/asio/ssl/context_base.hpp>
 #include <boost/property_tree/json_parser.hpp>
@@ -31,6 +29,7 @@
 #include "utility.h"
 #include "uuid.h"
 #include "video.h"
+#include "sunshinehttp.h"
 
 using namespace std::literals;
 namespace nvhttp {
@@ -38,71 +37,7 @@ namespace nvhttp {
   namespace fs = std::filesystem;
   namespace pt = boost::property_tree;
 
-  class SunshineHttpsServer: public SimpleWeb::Server<SimpleWeb::HTTPS> {
-  public:
-    SunshineHttpsServer(const std::string &certification_file, const std::string &private_key_file):
-        SimpleWeb::Server<SimpleWeb::HTTPS>::Server(certification_file, private_key_file) {}
-
-    std::function<int(SSL *)> verify;
-    std::function<void(std::shared_ptr<Response>, std::shared_ptr<Request>)> on_verify_failed;
-
-  protected:
-    void
-    after_bind() override {
-      SimpleWeb::Server<SimpleWeb::HTTPS>::after_bind();
-
-      if (verify) {
-        context.set_verify_mode(boost::asio::ssl::verify_peer | boost::asio::ssl::verify_fail_if_no_peer_cert | boost::asio::ssl::verify_client_once);
-        context.set_verify_callback([](int verified, boost::asio::ssl::verify_context &ctx) {
-          // To respond with an error message, a connection must be established
-          return 1;
-        });
-      }
-    }
-
-    // This is Server<HTTPS>::accept() with SSL validation support added
-    void
-    accept() override {
-      auto connection = create_connection(*io_service, context);
-
-      acceptor->async_accept(connection->socket->lowest_layer(), [this, connection](const SimpleWeb::error_code &ec) {
-        auto lock = connection->handler_runner->continue_lock();
-        if (!lock)
-          return;
-
-        if (ec != SimpleWeb::error::operation_aborted)
-          this->accept();
-
-        auto session = std::make_shared<Session>(config.max_request_streambuf_size, connection);
-
-        if (!ec) {
-          boost::asio::ip::tcp::no_delay option(true);
-          SimpleWeb::error_code ec;
-          session->connection->socket->lowest_layer().set_option(option, ec);
-
-          session->connection->set_timeout(config.timeout_request);
-          session->connection->socket->async_handshake(boost::asio::ssl::stream_base::server, [this, session](const SimpleWeb::error_code &ec) {
-            session->connection->cancel_timeout();
-            auto lock = session->connection->handler_runner->continue_lock();
-            if (!lock)
-              return;
-            if (!ec) {
-              if (verify && !verify(session->connection->socket->native_handle()))
-                this->write(session, on_verify_failed);
-              else
-                this->read(session);
-            }
-            else if (this->on_error)
-              this->on_error(session->request, ec);
-          });
-        }
-        else if (this->on_error)
-          this->on_error(session->request, ec);
-      });
-    }
-  };
-
-  using https_server_t = SunshineHttpsServer;
+  using https_server_t = sunshinehttp::SunshineHttpsServer;
   using http_server_t = SimpleWeb::Server<SimpleWeb::HTTP>;
 
   struct conf_intern_t {
@@ -410,6 +345,21 @@ namespace nvhttp {
     tree.put("root.<xmlattr>.status_code", 200);
   }
 
+  client_t
+  getclient(req_https_t request) {
+    auto certStr = request->header.find("cert")->second;
+    for (auto &[_, application] : map_id_applications) {
+      for (auto &client : application.clients) {
+        if (client.cert == certStr) {
+          return client;
+        }
+      }
+    }
+
+    client_t client;
+    return client;
+  }
+
   template <class T>
   struct tunnel;
 
@@ -432,7 +382,8 @@ namespace nvhttp {
     BOOST_LOG(debug) << "DESTINATION :: "sv << request->path;
 
     for (auto &[name, val] : request->header) {
-      BOOST_LOG(debug) << name << " -- " << val;
+      if (name != "cert")
+        BOOST_LOG(debug) << name << " -- " << val;
     }
 
     BOOST_LOG(debug) << " [--] "sv;
@@ -612,6 +563,9 @@ namespace nvhttp {
     if constexpr (std::is_same_v<SimpleWeb::HTTPS, T>) {
       auto args = request->parse_query_string();
       auto clientID = args.find("uniqueid"s);
+      auto client = getclient(request);
+      BOOST_LOG(debug) << "CLIENT FBP :: " << client.fbp;
+      BOOST_LOG(debug) << "CLIENT SECONDS :: " << client.seconds;
 
       if (clientID != std::end(args)) {
         if (auto it = map_id_applications.find(clientID->second); it != std::end(map_id_applications)) {
@@ -947,18 +901,7 @@ namespace nvhttp {
     http_server_t http_server;
 
     // Verify certificates after establishing connection
-    https_server.verify = [&cert_chain, add_cert](SSL *ssl) {
-      crypto::x509_t x509 { SSL_get_peer_certificate(ssl) };
-
-      X509* cert = x509.get();
-      BIO* bio = BIO_new(BIO_s_mem());
-      PEM_write_bio_X509(bio, cert);
-      char* buffer;
-      long length = BIO_get_mem_data(bio, &buffer);
-      std::string pemStr(buffer, length);
-      BOOST_LOG(debug) << "CERT ::" << pemStr;
-      BIO_free(bio);
-
+    https_server.verify = [&cert_chain, add_cert](crypto::x509_t& x509) {
       if (!x509) {
         BOOST_LOG(info) << "unknown -- denied"sv;
         return 0;
