@@ -48,7 +48,7 @@ namespace nvhttp {
   struct client_t {
     std::string fbp;
     std::int16_t seconds;
-    std::string cert;
+    std::vector<std::string> certs;
   };
 
   struct application_t {
@@ -60,7 +60,7 @@ namespace nvhttp {
     struct {
       std::string fbp;
       std::string uniqueID;
-      std::string cert;
+      std::vector<std::string> certs;
     } client;
 
     std::unique_ptr<crypto::aes_t> cipher_key;
@@ -126,8 +126,13 @@ namespace nvhttp {
       application_node.put("uniqueid"s, application.uniqueID);
       auto &clients_node = application_node.add_child("clients"s, pt::ptree {});
       for (auto &client : application.clients) {
-        pt::ptree client_node;
-        client_node.put("cert"s, client.cert);
+        pt::ptree client_node, cert_nodes;
+        for (auto &cert : client.certs) {
+          pt::ptree cert_node;
+          cert_node.put_value(cert);
+          cert_nodes.push_back(std::make_pair(""s, cert_node));
+        }
+        client_node.add_child("certs"s, cert_nodes);
         client_node.put("fbp", client.fbp);
         client_node.put("seconds"s, client.seconds);
         clients_node.push_back(std::make_pair(""s, client_node));
@@ -181,7 +186,9 @@ namespace nvhttp {
 
       for (auto &[_, client_node] : device_node.get_child("clients")) {
         client_t client;
-        client.cert = client_node.get<std::string>("cert");
+        for (auto &[_, el] : client_node.get_child("certs")) {
+          client.certs.emplace_back(el.get_value<std::string>());
+        }
         client.fbp = client_node.get<std::string>("fbp");
         client.seconds = client_node.get<std::int16_t>("seconds");
         application.clients.emplace_back(client);
@@ -194,6 +201,21 @@ namespace nvhttp {
     switch (op) {
       case op_e::ADD: {
         auto &application = map_id_applications[uniqueID];
+        for (auto &old_client : application.clients) {
+          if (old_client.fbp == client.fbp) {
+            client.seconds = old_client.seconds;
+            for (const auto& cert : old_client.certs) {
+              if (std::find(client.certs.begin(), client.certs.end(), cert) == client.certs.end()) {
+                  client.certs.push_back(cert);
+              }
+            }
+          }
+        }
+
+        application.clients.erase(std::remove_if(application.clients.begin(), application.clients.end(), [client](const client_t& old_client) {
+          return client.fbp == old_client.fbp;
+        }), application.clients.end());
+
         application.clients.emplace_back(std::move(client));
         application.uniqueID = uniqueID;
       } break;
@@ -303,7 +325,7 @@ namespace nvhttp {
   void
   clientpairingsecret(std::shared_ptr<safe::queue_t<crypto::x509_t>> &add_cert, pair_session_t &sess, pt::ptree &tree, const args_t &args) {
     auto &client = sess.client;
-
+    auto &cert = client.certs.front();
     auto pairingsecret = util::from_hex_vec(get_arg(args, "clientpairingsecret"), true);
 
     std::string_view secret { pairingsecret.data(), 16 };
@@ -311,7 +333,7 @@ namespace nvhttp {
 
     assert((secret.size() + sign.size()) == pairingsecret.size());
 
-    auto x509 = crypto::x509(client.cert);
+    auto x509 = crypto::x509(cert);
     auto x509_sign = crypto::signature(x509);
 
     std::string data;
@@ -324,15 +346,15 @@ namespace nvhttp {
     auto hash = crypto::hash(data);
 
     // if hash not correct, probably MITM
-    if (!std::memcmp(hash.data(), sess.clienthash.data(), hash.size()) && crypto::verify256(crypto::x509(client.cert), secret, sign)) {
+    if (!std::memcmp(hash.data(), sess.clienthash.data(), hash.size()) && crypto::verify256(x509, secret, sign)) {
       tree.put("root.paired", 1);
-      add_cert->raise(crypto::x509(client.cert));
+      add_cert->raise(crypto::x509(cert));
 
       auto it = map_id_sess.find(client.uniqueID);
 
       client_t client_node;
       client_node.seconds = DEFAULT_INITIAL_SECONDS;
-      client_node.cert = client.cert;
+      client_node.certs = client.certs;
       client_node.fbp = client.fbp;
       update_id_client(client.uniqueID, std::move(client_node), op_e::ADD);
       map_id_sess.erase(it);
@@ -350,7 +372,7 @@ namespace nvhttp {
     auto certStr = request->header.find("cert")->second;
     for (auto &[_, application] : map_id_applications) {
       for (auto &client : application.clients) {
-        if (client.cert == certStr) {
+        if (auto it = std::find(client.certs.begin(), client.certs.end(), certStr); it != std::end(client.certs)) {
           return client;
         }
       }
@@ -447,7 +469,7 @@ namespace nvhttp {
         pair_session_t sess;
 
         sess.client.uniqueID = std::move(uniqID);
-        sess.client.cert = util::from_hex_vec(get_arg(args, "clientcert"), true);
+        sess.client.certs.push_back(util::from_hex_vec(get_arg(args, "clientcert"), true));
         auto ptr = map_id_sess.emplace(sess.client.uniqueID, std::move(sess)).first;
 
         ptr->second.async_insert_pin.salt = std::move(get_arg(args, "salt"));
@@ -887,7 +909,9 @@ namespace nvhttp {
     crypto::cert_chain_t cert_chain;
     for (auto &[_, application] : map_id_applications) {
       for (auto &client : application.clients) {
-        cert_chain.add(crypto::x509(client.cert));
+        for (auto &cert : client.certs) {
+          cert_chain.add(crypto::x509(cert));
+        }
       }
     }
 
