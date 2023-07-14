@@ -378,7 +378,7 @@ namespace nvhttp {
       }
     }
 
-    client_t client;
+    client_t client = { "unregistered", 0, {}};
     return client;
   }
 
@@ -583,16 +583,12 @@ namespace nvhttp {
 
     int pair_status = 0;
     if constexpr (std::is_same_v<SimpleWeb::HTTPS, T>) {
-      auto args = request->parse_query_string();
-      auto clientID = args.find("uniqueid"s);
       auto client = getclient(request);
       BOOST_LOG(debug) << "CLIENT FBP :: " << client.fbp;
       BOOST_LOG(debug) << "CLIENT SECONDS :: " << client.seconds;
 
-      if (clientID != std::end(args)) {
-        if (auto it = map_id_applications.find(clientID->second); it != std::end(map_id_applications)) {
-          pair_status = 1;
-        }
+      if (client.seconds > 0) {
+        pair_status = 1;
       }
     }
 
