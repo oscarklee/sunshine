@@ -44,6 +44,12 @@ namespace nvhttp {
   */
   constexpr auto DEFAULT_INITIAL_SECONDS = 3600;
 
+  struct client_t {
+    std::string fbp;
+    std::int16_t seconds;
+    std::vector<std::string> certs;
+  };
+
   // functions
   void
   start();

@@ -45,12 +45,6 @@ namespace nvhttp {
     std::string pkey;
   } conf_intern;
 
-  struct client_t {
-    std::string fbp;
-    std::int16_t seconds;
-    std::vector<std::string> certs;
-  };
-
   struct application_t {
     std::string uniqueID;
     std::vector<client_t> clients;
@@ -97,7 +91,7 @@ namespace nvhttp {
   get_arg(const args_t &args, const char *name) {
     auto it = args.find(name);
     if (it == std::end(args)) {
-      throw std::out_of_range(name);
+      return "";
     }
     return it->second;
   }
@@ -229,10 +223,27 @@ namespace nvhttp {
     }
   }
 
+  client_t
+  getclient(std::string certStr) {
+    if (!certStr.empty()) {
+      for (auto &[_, application] : map_id_applications) {
+        for (auto &client : application.clients) {
+          if (auto it = std::find(client.certs.begin(), client.certs.end(), certStr); it != std::end(client.certs)) {
+            return client;
+          }
+        }
+      }
+    }
+
+    client_t client = { "unregistered", 0, {}};
+    return client;
+  }
+
   rtsp_stream::launch_session_t
   make_launch_session(bool host_audio, const args_t &args) {
     rtsp_stream::launch_session_t launch_session;
 
+    launch_session.client = std::make_shared<nvhttp::client_t>(getclient(get_arg(args, "cert")));
     launch_session.host_audio = host_audio;
     launch_session.gcm_key = util::from_hex<crypto::aes_t>(get_arg(args, "rikey"), true);
     uint32_t prepend_iv = util::endian::big<uint32_t>(util::from_view(get_arg(args, "rikeyid")));
@@ -365,21 +376,6 @@ namespace nvhttp {
     }
 
     tree.put("root.<xmlattr>.status_code", 200);
-  }
-
-  client_t
-  getclient(req_https_t request) {
-    auto certStr = request->header.find("cert")->second;
-    for (auto &[_, application] : map_id_applications) {
-      for (auto &client : application.clients) {
-        if (auto it = std::find(client.certs.begin(), client.certs.end(), certStr); it != std::end(client.certs)) {
-          return client;
-        }
-      }
-    }
-
-    client_t client = { "unregistered", 0, {}};
-    return client;
   }
 
   template <class T>
@@ -583,7 +579,8 @@ namespace nvhttp {
 
     int pair_status = 0;
     if constexpr (std::is_same_v<SimpleWeb::HTTPS, T>) {
-      auto client = getclient(request);
+      auto certStr = request->header.find("cert")->second;
+      auto client = getclient(certStr);
       BOOST_LOG(debug) << "CLIENT FBP :: " << client.fbp;
       BOOST_LOG(debug) << "CLIENT SECONDS :: " << client.seconds;
 
@@ -700,12 +697,15 @@ namespace nvhttp {
     if (rtsp_stream::session_count() == config::stream.channels) {
       tree.put("root.resume", 0);
       tree.put("root.<xmlattr>.status_code", 503);
-      tree.put("root.<xmlattr>.status_message", "The host's concurrent stream limit has been reached. Stop an existing stream or increase the 'Channels' value in the Sunshine Web UI.");
+      tree.put("root.<xmlattr>.status_message", "The server is being used by another device.");
 
       return;
     }
 
     auto args = request->parse_query_string();
+    auto certStr = request->header.find("cert")->second;
+    args.insert({"cert", certStr});
+
     if (
       args.find("rikey"s) == std::end(args) ||
       args.find("rikeyid"s) == std::end(args) ||
@@ -780,7 +780,7 @@ namespace nvhttp {
     if (rtsp_stream::session_count() == config::stream.channels) {
       tree.put("root.resume", 0);
       tree.put("root.<xmlattr>.status_code", 503);
-      tree.put("root.<xmlattr>.status_message", "The host's concurrent stream limit has been reached. Stop an existing stream or increase the 'Channels' value in the Sunshine Web UI.");
+      tree.put("root.<xmlattr>.status_message", "The server is being used by another device.");
 
       return;
     }
@@ -795,6 +795,9 @@ namespace nvhttp {
     }
 
     auto args = request->parse_query_string();
+    auto certStr = request->header.find("cert")->second;
+    args.insert({"cert", certStr});
+
     if (
       args.find("rikey"s) == std::end(args) ||
       args.find("rikeyid"s) == std::end(args)) {

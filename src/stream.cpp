@@ -27,6 +27,7 @@ extern "C" {
 #include "sync.h"
 #include "thread_safe.h"
 #include "utility.h"
+#include "nvhttp.h"
 
 #define IDX_START_A 0
 #define IDX_START_B 1
@@ -312,6 +313,7 @@ namespace stream {
     safe::mail_t mail;
 
     std::shared_ptr<input::input_t> input;
+    std::shared_ptr<nvhttp::client_t> client;
 
     std::thread audioThread;
     std::thread videoThread;
@@ -1641,7 +1643,7 @@ namespace stream {
     }
 
     std::shared_ptr<session_t>
-    alloc(config_t &config, crypto::aes_t &gcm_key, crypto::aes_t &iv) {
+    alloc(config_t &config, std::shared_ptr<nvhttp::client_t> &client, crypto::aes_t &gcm_key, crypto::aes_t &iv) {
       auto session = std::make_shared<session_t>();
 
       auto mail = std::make_shared<safe::mail_raw_t>();
@@ -1659,6 +1661,7 @@ namespace stream {
 
       session->video.idr_events = mail->event<bool>(mail::idr);
       session->video.lowseq = 0;
+      session->client = client;
 
       constexpr auto max_block_size = crypto::cipher::round_to_pkcs7_padded(2048);
 

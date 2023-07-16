@@ -9,6 +9,7 @@
 #include "audio.h"
 #include "crypto.h"
 #include "video.h"
+#include "nvhttp.h"
 
 namespace stream {
   constexpr auto VIDEO_STREAM_PORT = 9;
@@ -39,7 +40,7 @@ namespace stream {
     };
 
     std::shared_ptr<session_t>
-    alloc(config_t &config, crypto::aes_t &gcm_key, crypto::aes_t &iv);
+    alloc(config_t &config, std::shared_ptr<nvhttp::client_t> &client, crypto::aes_t &gcm_key, crypto::aes_t &iv);
     int
     start(session_t &session, const std::string &addr_string);
     void

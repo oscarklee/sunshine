@@ -8,11 +8,13 @@
 
 #include "crypto.h"
 #include "thread_safe.h"
+#include "nvhttp.h"
 
 namespace rtsp_stream {
   constexpr auto RTSP_SETUP_PORT = 21;
 
   struct launch_session_t {
+    std::shared_ptr<nvhttp::client_t> client;
     crypto::aes_t gcm_key;
     crypto::aes_t iv;
 
