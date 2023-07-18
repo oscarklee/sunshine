@@ -28,6 +28,7 @@ extern "C" {
 #include "thread_safe.h"
 #include "utility.h"
 #include "nvhttp.h"
+#include "timeoutmanager.h"
 
 #define IDX_START_A 0
 #define IDX_START_B 1
@@ -479,10 +480,12 @@ namespace stream {
           call(type, session, payload);
         } break;
         case ENET_EVENT_TYPE_CONNECT:
-          BOOST_LOG(info) << "CLIENT CONNECTED"sv;
+          BOOST_LOG(info) << "CLIENT CONNECTED FBP :: "sv << session->client->fbp;
+          timeoutmanager::start(session->client);
           break;
         case ENET_EVENT_TYPE_DISCONNECT:
-          BOOST_LOG(info) << "CLIENT DISCONNECTED"sv;
+          BOOST_LOG(info) << "CLIENT DISCONNECTED"sv << session->client->fbp;
+          timeoutmanager::stop(session->client);
           // No more clients to send video data to ^_^
           if (session->state == session::state_e::RUNNING) {
             session::stop(*session);

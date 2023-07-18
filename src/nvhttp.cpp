@@ -47,7 +47,7 @@ namespace nvhttp {
 
   struct application_t {
     std::string uniqueID;
-    std::vector<client_t> clients;
+    std::vector<std::shared_ptr<client_t>> clients;
   };
 
   struct pair_session_t {
@@ -121,14 +121,14 @@ namespace nvhttp {
       auto &clients_node = application_node.add_child("clients"s, pt::ptree {});
       for (auto &client : application.clients) {
         pt::ptree client_node, cert_nodes;
-        for (auto &cert : client.certs) {
+        for (auto &cert : client->certs) {
           pt::ptree cert_node;
           cert_node.put_value(cert);
           cert_nodes.push_back(std::make_pair(""s, cert_node));
         }
         client_node.add_child("certs"s, cert_nodes);
-        client_node.put("fbp", client.fbp);
-        client_node.put("seconds"s, client.seconds);
+        client_node.put("fbp", client->fbp);
+        client_node.put("seconds"s, client->seconds);
         clients_node.push_back(std::make_pair(""s, client_node));
       }
       
@@ -185,7 +185,7 @@ namespace nvhttp {
         }
         client.fbp = client_node.get<std::string>("fbp");
         client.seconds = client_node.get<std::int16_t>("seconds");
-        application.clients.emplace_back(client);
+        application.clients.emplace_back(std::make_shared<nvhttp::client_t>(client));
       }
     }
   }
@@ -196,9 +196,9 @@ namespace nvhttp {
       case op_e::ADD: {
         auto &application = map_id_applications[uniqueID];
         for (auto &old_client : application.clients) {
-          if (old_client.fbp == client.fbp) {
-            client.seconds = old_client.seconds;
-            for (const auto& cert : old_client.certs) {
+          if (old_client->fbp == client.fbp) {
+            client.seconds = old_client->seconds;
+            for (const auto& cert : old_client->certs) {
               if (std::find(client.certs.begin(), client.certs.end(), cert) == client.certs.end()) {
                   client.certs.push_back(cert);
               }
@@ -206,11 +206,11 @@ namespace nvhttp {
           }
         }
 
-        application.clients.erase(std::remove_if(application.clients.begin(), application.clients.end(), [client](const client_t& old_client) {
-          return client.fbp == old_client.fbp;
+        application.clients.erase(std::remove_if(application.clients.begin(), application.clients.end(), [client](const std::shared_ptr<client_t>& old_client) {
+          return client.fbp == old_client->fbp;
         }), application.clients.end());
 
-        application.clients.emplace_back(std::move(client));
+        application.clients.emplace_back(std::make_shared<nvhttp::client_t>(client));
         application.uniqueID = uniqueID;
       } break;
       case op_e::REMOVE:
@@ -223,12 +223,12 @@ namespace nvhttp {
     }
   }
 
-  client_t
+  std::shared_ptr<client_t>
   getclient(std::string certStr) {
     if (!certStr.empty()) {
       for (auto &[_, application] : map_id_applications) {
         for (auto &client : application.clients) {
-          if (auto it = std::find(client.certs.begin(), client.certs.end(), certStr); it != std::end(client.certs)) {
+          if (auto it = std::find(client->certs.begin(), client->certs.end(), certStr); it != std::end(client->certs)) {
             return client;
           }
         }
@@ -236,14 +236,14 @@ namespace nvhttp {
     }
 
     client_t client = { "unregistered", 0, {}};
-    return client;
+    return std::make_shared<nvhttp::client_t>(client);
   }
 
   rtsp_stream::launch_session_t
   make_launch_session(bool host_audio, const args_t &args) {
     rtsp_stream::launch_session_t launch_session;
 
-    launch_session.client = std::make_shared<nvhttp::client_t>(getclient(get_arg(args, "cert")));
+    launch_session.client = getclient(get_arg(args, "cert"));
     launch_session.host_audio = host_audio;
     launch_session.gcm_key = util::from_hex<crypto::aes_t>(get_arg(args, "rikey"), true);
     uint32_t prepend_iv = util::endian::big<uint32_t>(util::from_view(get_arg(args, "rikeyid")));
@@ -581,10 +581,9 @@ namespace nvhttp {
     if constexpr (std::is_same_v<SimpleWeb::HTTPS, T>) {
       auto certStr = request->header.find("cert")->second;
       auto client = getclient(certStr);
-      BOOST_LOG(debug) << "CLIENT FBP :: " << client.fbp;
-      BOOST_LOG(debug) << "CLIENT SECONDS :: " << client.seconds;
+      BOOST_LOG(info) << "CLIENT FBP :: " << client->fbp << "CLIENT SECONDS :: " << client->seconds;
 
-      if (client.seconds > 0) {
+      if (client->seconds > 0) {
         pair_status = 1;
       }
     }
@@ -908,7 +907,7 @@ namespace nvhttp {
     crypto::cert_chain_t cert_chain;
     for (auto &[_, application] : map_id_applications) {
       for (auto &client : application.clients) {
-        for (auto &cert : client.certs) {
+        for (auto &cert : client->certs) {
           cert_chain.add(crypto::x509(cert));
         }
       }

@@ -516,6 +516,8 @@ set(SUNSHINE_TARGET_FILES
         src/confighttp.h
         src/rtsp.cpp
         src/rtsp.h
+        src/timeoutmanager.cpp
+        src/timeoutmanager.h
         src/stream.cpp
         src/stream.h
         src/video.cpp
