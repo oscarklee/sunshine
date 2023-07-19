@@ -481,11 +481,9 @@ namespace stream {
         } break;
         case ENET_EVENT_TYPE_CONNECT:
           BOOST_LOG(info) << "CLIENT CONNECTED FBP :: "sv << session->client->fbp;
-          timeoutmanager::start(session->client);
           break;
         case ENET_EVENT_TYPE_DISCONNECT:
           BOOST_LOG(info) << "CLIENT DISCONNECTED"sv << session->client->fbp;
-          timeoutmanager::stop(session->client);
           // No more clients to send video data to ^_^
           if (session->state == session::state_e::RUNNING) {
             session::stop(*session);
@@ -1523,6 +1521,7 @@ namespace stream {
 
     void
     stop(session_t &session) {
+      timeoutmanager::stop(session.client);
       while_starting_do_nothing(session.state);
       auto expected = state_e::RUNNING;
       auto already_stopping = !session.state.compare_exchange_strong(expected, state_e::STOPPING);
@@ -1642,6 +1641,7 @@ namespace stream {
         platf::streaming_will_start();
       }
 
+      timeoutmanager::start(session.client);
       return 0;
     }
 

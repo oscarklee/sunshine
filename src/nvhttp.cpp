@@ -30,6 +30,7 @@
 #include "uuid.h"
 #include "video.h"
 #include "sunshinehttp.h"
+#include "timeoutmanager.h"
 
 using namespace std::literals;
 namespace nvhttp {
@@ -581,8 +582,6 @@ namespace nvhttp {
     if constexpr (std::is_same_v<SimpleWeb::HTTPS, T>) {
       auto certStr = request->header.find("cert")->second;
       auto client = getclient(certStr);
-      BOOST_LOG(info) << "CLIENT FBP :: " << client->fbp << "CLIENT SECONDS :: " << client->seconds;
-
       if (client->seconds > 0) {
         pair_status = 1;
       }
@@ -918,6 +917,11 @@ namespace nvhttp {
     // /resume doesn't always get the parameter "localAudioPlayMode"
     // /launch will store it in host_audio
     bool host_audio {};
+
+    // Verify client's time to save the state and quit session if it is consumed.
+    timeoutmanager::timeoutmanager_t::on_time_decrease = [](std::shared_ptr<nvhttp::client_t> client) {
+      BOOST_LOG(info) << "CLIENT FBP :: " << client->fbp << "CLIENT SECONDS :: " << client->seconds;
+    };
 
     https_server_t https_server { config::nvhttp.cert, config::nvhttp.pkey };
     http_server_t http_server;

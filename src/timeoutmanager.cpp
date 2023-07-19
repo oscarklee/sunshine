@@ -9,23 +9,16 @@
 #include "nvhttp.h"
 
 namespace timeoutmanager {
-    struct timeoutmanager_t {
-        std::shared_ptr<nvhttp::client_t> client;
-        std::thread thread;
-        std::atomic<bool>* pause;
-
-        timeoutmanager_t(std::shared_ptr<nvhttp::client_t> client, std::thread thread, std::atomic<bool>* pause)
-            : client(client), thread(std::move(thread)), pause(pause) {}
-    };
-
     std::unordered_map<std::string, timeoutmanager_t> managers;
+    std::function<void(std::shared_ptr<nvhttp::client_t>)> timeoutmanager_t::on_time_decrease;
 
     void timeoutmanagerthread(std::shared_ptr<nvhttp::client_t> client, std::atomic<bool>* pause) {
         while (client->seconds > 0) {
             while (!(*pause) && client->seconds > 0) {
-                BOOST_LOG(info) << "ID " << client->fbp << ": " << client->seconds << " seconds left.";
                 std::this_thread::sleep_for(std::chrono::seconds(1));
                 client->seconds--;
+
+                timeoutmanager_t::on_time_decrease(client);
             }
         }
     }
