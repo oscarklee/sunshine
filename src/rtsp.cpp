@@ -23,6 +23,7 @@ extern "C" {
 #include "sync.h"
 #include "video.h"
 #include "timeoutmanager.h"
+#include "process.h"
 
 #include <unordered_map>
 
@@ -231,6 +232,13 @@ namespace rtsp_stream {
         BOOST_LOG(info) << "CLIENT FBP :: " << client->fbp << "CLIENT SECONDS :: " << client->seconds;
         if (client->seconds < 1) {
           clear(true);
+          if (proc::proc.running() > 0) {
+            proc::proc.terminate();
+          }
+        }
+
+        if (client->seconds % 60 == 0) {
+          nvhttp::save_state();
         }
       };
     }

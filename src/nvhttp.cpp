@@ -579,11 +579,7 @@ namespace nvhttp {
 
     int pair_status = 0;
     if constexpr (std::is_same_v<SimpleWeb::HTTPS, T>) {
-      auto certStr = request->header.find("cert")->second;
-      auto client = getclient(certStr);
-      if (client->seconds > 0) {
-        pair_status = 1;
-      }
+      pair_status = 1;
     }
 
     auto local_endpoint = request->local_endpoint();
@@ -691,6 +687,18 @@ namespace nvhttp {
       response->close_connection_after_response = true;
     });
 
+    auto args = request->parse_query_string();
+    auto certStr = request->header.find("cert")->second;
+    args.insert({"cert", certStr});
+
+    if (getclient(certStr)->seconds < 1) {
+      tree.put("root.resume", 0);
+      tree.put("root.<xmlattr>.status_code", 403);
+      tree.put("root.<xmlattr>.status_message", "You don't have time available");
+
+      return;
+    }
+
     if (rtsp_stream::session_count() == config::stream.channels) {
       tree.put("root.resume", 0);
       tree.put("root.<xmlattr>.status_code", 503);
@@ -698,10 +706,6 @@ namespace nvhttp {
 
       return;
     }
-
-    auto args = request->parse_query_string();
-    auto certStr = request->header.find("cert")->second;
-    args.insert({"cert", certStr});
 
     if (
       args.find("rikey"s) == std::end(args) ||
@@ -782,6 +786,18 @@ namespace nvhttp {
       return;
     }
 
+    auto args = request->parse_query_string();
+    auto certStr = request->header.find("cert")->second;
+    args.insert({"cert", certStr});
+
+    if (getclient(certStr)->seconds < 1) {
+      tree.put("root.resume", 0);
+      tree.put("root.<xmlattr>.status_code", 403);
+      tree.put("root.<xmlattr>.status_message", "You don't have time available");
+
+      return;
+    }
+
     auto current_appid = proc::proc.running();
     if (current_appid == 0) {
       tree.put("root.resume", 0);
@@ -790,10 +806,6 @@ namespace nvhttp {
 
       return;
     }
-
-    auto args = request->parse_query_string();
-    auto certStr = request->header.find("cert")->second;
-    args.insert({"cert", certStr});
 
     if (
       args.find("rikey"s) == std::end(args) ||
