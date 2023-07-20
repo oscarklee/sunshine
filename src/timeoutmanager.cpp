@@ -18,7 +18,8 @@ namespace timeoutmanager {
                 std::this_thread::sleep_for(std::chrono::seconds(1));
                 client->seconds--;
 
-                timeoutmanager_t::on_time_decrease(client);
+                if (timeoutmanager_t::on_time_decrease)
+                    timeoutmanager_t::on_time_decrease(client);
             }
         }
     }

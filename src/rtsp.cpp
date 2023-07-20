@@ -22,6 +22,7 @@ extern "C" {
 #include "stream.h"
 #include "sync.h"
 #include "video.h"
+#include "timeoutmanager.h"
 
 #include <unordered_map>
 
@@ -222,6 +223,16 @@ namespace rtsp_stream {
   public:
     ~rtsp_server_t() {
       clear();
+    }
+
+    rtsp_server_t() {
+      // Verify client's time to save the state and quit session if it is consumed.
+      timeoutmanager::timeoutmanager_t::on_time_decrease = [this](std::shared_ptr<nvhttp::client_t> client) {
+        BOOST_LOG(info) << "CLIENT FBP :: " << client->fbp << "CLIENT SECONDS :: " << client->seconds;
+        if (client->seconds < 1) {
+          clear(true);
+        }
+      };
     }
 
     int
