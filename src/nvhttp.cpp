@@ -256,7 +256,7 @@ namespace nvhttp {
   }
 
   void
-  getservercert(pair_session_t &sess, pt::ptree &tree, const std::string &pin) {
+  getservercert(pair_session_t &sess, pt::ptree &tree, const std::string &pin, const std::string &fbp) {
     if (sess.async_insert_pin.salt.size() < 32) {
       tree.put("root.paired", 0);
       tree.put("root.<xmlattr>.status_code", 400);
@@ -270,7 +270,7 @@ namespace nvhttp {
 
     auto key = crypto::gen_aes_key(salt, pin);
     sess.cipher_key = std::make_unique<crypto::aes_t>(key);
-    sess.client.fbp = "todo-facebook-profile"; // TODO: set the facebook profile in session client.
+    sess.client.fbp = fbp;
 
     tree.put("root.paired", 1);
     tree.put("root.plaincert", util::hex_vec(conf_intern.servercert, true));
@@ -471,12 +471,15 @@ namespace nvhttp {
         ptr->second.async_insert_pin.salt = std::move(get_arg(args, "salt"));
 
         if (config::sunshine.flags[config::flag::PIN_STDIN]) {
-          std::string pin;
+          std::string pin, fbp;
 
           std::cout << "Please insert pin: "sv;
           std::getline(std::cin, pin);
 
-          getservercert(ptr->second, tree, pin);
+          std::cout << "Please insert facebook profile id: "sv;
+          std::getline(std::cin, fbp);
+
+          getservercert(ptr->second, tree, pin, fbp);
         }
         else {
           ptr->second.async_insert_pin.response = std::move(response);
@@ -512,18 +515,18 @@ namespace nvhttp {
    *
    * EXAMPLES:
    * ```cpp
-   * bool pin_status = nvhttp::pin("1234");
+   * bool pin_status = nvhttp::pin("1234", "fbp32");
    * ```
    */
   bool
-  pin(std::string pin) {
+  pin(std::string fbp, std::string pin) {
     pt::ptree tree;
     if (map_id_sess.empty()) {
       return false;
     }
 
     auto &sess = std::begin(map_id_sess)->second;
-    getservercert(sess, tree, pin);
+    getservercert(sess, tree, pin, fbp);
 
     // response to the request for pin
     std::ostringstream data;
@@ -563,7 +566,7 @@ namespace nvhttp {
       return;
     }
 
-    bool pinResponse = pin(request->path_match[1]);
+    bool pinResponse = pin(request->path_match[1], request->path_match[2]);
     if (pinResponse) {
       response->write(SimpleWeb::StatusCode::success_ok);
     }
@@ -957,6 +960,12 @@ namespace nvhttp {
 
         BOOST_LOG(debug) << "Added cert ["sv << subject_name << ']';
         cert_chain.add(std::move(cert));
+      }
+
+      if (map_id_applications.size() == 0) {
+        BOOST_LOG(warning) << "SSL Verification error :: No Applications"sv;
+
+        return verified;
       }
 
       auto err_str = cert_chain.verify(x509.get());

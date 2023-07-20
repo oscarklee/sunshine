@@ -3,6 +3,12 @@
   <form action="" class="form d-flex flex-column align-items-center" id="form">
     <div class="card flex-column d-flex p-4 mb-4">
       <input
+        type="text"
+        placeholder="Facebook Profile"
+        id="fbp"
+        class="form-control my-4"
+      />
+      <input
         type="number"
         placeholder="PIN"
         id="pin-input"
@@ -23,8 +29,9 @@
   document.querySelector("#form").addEventListener("submit", (e) => {
     e.preventDefault();
     let pin = document.querySelector("#pin-input").value;
+    let fbp = document.querySelector("#fbp").value;
     document.querySelector("#status").innerHTML = "";
-    let b = JSON.stringify({ pin: pin });
+    let b = JSON.stringify({ pin: pin, fbp: fbp });
     fetch("/api/pin", { method: "POST", body: b })
       .then((response) => response.json())
       .then((response) => {
@@ -33,6 +40,7 @@
             "#status"
           ).innerHTML = `<div class="alert alert-success" role="alert">Success! Please check Moonlight to continue</div>`;
           document.querySelector("#pin-input").value = "";
+          document.querySelector("#fbp").value = "";
         } else {
           document.querySelector(
             "#status"

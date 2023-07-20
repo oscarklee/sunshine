@@ -54,7 +54,7 @@ namespace nvhttp {
   void
   start();
   bool
-  pin(std::string pin);
+  pin(std::string fbp, std::string pin);
   void
   erase_all_clients();
   void
