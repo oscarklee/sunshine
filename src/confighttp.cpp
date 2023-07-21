@@ -292,6 +292,40 @@ namespace confighttp {
   }
 
   void
+  getJavascriptFile(resp_https_t response, req_https_t request) {
+    print_req(request);
+    fs::path webDirPath(WEB_DIR);
+    fs::path jsPath(webDirPath / "js");
+
+    // .relative_path is needed to shed any leading slash that might exist in the request path
+    auto filePath = fs::weakly_canonical(webDirPath / fs::path(request->path).relative_path());
+
+    // Don't do anything if file does not exist or is outside the js directory
+    if (!isChildPath(filePath, jsPath)) {
+      BOOST_LOG(warning) << "Someone requested a path " << filePath << " that is outside the js folder";
+      response->write(SimpleWeb::StatusCode::client_error_bad_request, "Bad Request");
+    }
+    else if (!fs::exists(filePath)) {
+      response->write(SimpleWeb::StatusCode::client_error_not_found);
+    }
+    else {
+      auto relPath = fs::relative(filePath, webDirPath);
+      // get the mime type from the file extension mime_types map
+      // remove the leading period from the extension
+      auto mimeType = mime_types.find(relPath.extension().string().substr(1));
+      // check if the extension is in the map at the x position
+      if (mimeType != mime_types.end()) {
+        // if it is, set the content type to the mime type
+        SimpleWeb::CaseInsensitiveMultimap headers;
+        headers.emplace("Content-Type", mimeType->second);
+        std::ifstream in(filePath.string(), std::ios::binary);
+        response->write(SimpleWeb::StatusCode::success_ok, in, headers);
+      }
+      // do not return any file if the type is not in the map
+    }
+  }
+
+  void
   getNodeModules(resp_https_t response, req_https_t request) {
     print_req(request);
     fs::path webDirPath(WEB_DIR);
@@ -758,6 +792,7 @@ namespace confighttp {
     server.resource["^/images/favicon.ico$"]["GET"] = getFaviconImage;
     server.resource["^/images/logo-sunshine-45.png$"]["GET"] = getSunshineLogoImage;
     server.resource["^/node_modules\\/.+$"]["GET"] = getNodeModules;
+    server.resource["^/js\\/.+$"]["GET"] = getJavascriptFile;
     server.config.reuse_address = true;
     server.config.address = "0.0.0.0"s;
     server.config.port = port_https;
