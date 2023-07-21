@@ -38,6 +38,7 @@
 #include "utility.h"
 #include "uuid.h"
 #include "version.h"
+#include "facebookapi.h"
 
 using namespace std::literals;
 
@@ -715,7 +716,8 @@ namespace confighttp {
       // TODO: Input Validation
       pt::read_json(ss, inputTree);
       std::string pin = inputTree.get<std::string>("pin");
-      std::string fbp = inputTree.get<std::string>("fbp");
+      std::string fat = inputTree.get<std::string>("fb-access-token");
+      std::string fbp = facebook::getFacebookProfile(fat);
       outputTree.put("status", nvhttp::pin(fbp, pin));
     }
     catch (std::exception &e) {

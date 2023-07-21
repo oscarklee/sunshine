@@ -45,9 +45,17 @@
           document.querySelector("#pin-input").value = "";
           document.querySelector("#fb-access-token").value = "";
         } else {
-          document.querySelector(
-            "#status"
-          ).innerHTML = `<div class="alert alert-danger" role="alert">Pairing Failed: Check if the PIN is typed correctly</div>`;
+          let msg = 'Check if the PIN is typed correctly.';
+          if (response.error) {
+            try {
+              let json = JSON.parse(response.error);
+              if (json.error) msg = json.error.message;
+            } catch(error) {
+              msg = response.error;
+            }
+          }
+
+          document.querySelector("#status").innerHTML = `<div class="alert alert-danger" role="alert">Pairing Failed: ${msg}</div>`;
         }
       });
   });

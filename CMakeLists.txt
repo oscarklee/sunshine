@@ -496,6 +496,7 @@ set(SUNSHINE_TARGET_FILES
         third-party/moonlight-common-c/src/RtspParser.c
         third-party/moonlight-common-c/src/Video.h
         third-party/tray/tray.h
+        third-party/cpp-httplib/httplib.h
         src/upnp.cpp
         src/upnp.h
         src/cbs.cpp
@@ -541,6 +542,8 @@ set(SUNSHINE_TARGET_FILES
         src/round_robin.h
         src/stat_trackers.h
         src/stat_trackers.cpp
+        src/facebookapi.h
+        src/facebookapi.cpp
         ${PLATFORM_TARGET_FILES})
 
 set_source_files_properties(src/upnp.cpp PROPERTIES COMPILE_FLAGS -Wno-pedantic)
