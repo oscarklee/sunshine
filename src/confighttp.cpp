@@ -157,13 +157,13 @@ namespace confighttp {
 
   // todo - combine these functions into a single function that accepts the page, i.e "index", "pin", "apps"
   void
-  getIndexPage(resp_https_t response, req_https_t request) {
+  getHomePage(resp_https_t response, req_https_t request) {
     if (!authenticate(response, request)) return;
 
     print_req(request);
 
     std::string header = read_file(WEB_DIR "header.html");
-    std::string content = read_file(WEB_DIR "index.html");
+    std::string content = read_file(WEB_DIR "home.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
     response->write(header + content, headers);
@@ -771,7 +771,7 @@ namespace confighttp {
 
     https_server_t server { config::nvhttp.cert, config::nvhttp.pkey };
     server.default_resource["GET"] = not_found;
-    server.resource["^/$"]["GET"] = getIndexPage;
+    server.resource["^/$"]["GET"] = getHomePage;
     server.resource["^/pin$"]["GET"] = getPinPage;
     server.resource["^/apps$"]["GET"] = getAppsPage;
     server.resource["^/clients$"]["GET"] = getClientsPage;

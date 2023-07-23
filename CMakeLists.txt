@@ -515,6 +515,8 @@ set(SUNSHINE_TARGET_FILES
         src/httpcommon.h
         src/confighttp.cpp
         src/confighttp.h
+        src/publichttp.cpp
+        src/publichttp.h
         src/rtsp.cpp
         src/rtsp.h
         src/timeoutmanager.cpp

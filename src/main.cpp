@@ -20,6 +20,7 @@
 // local includes
 #include "config.h"
 #include "confighttp.h"
+#include "publichttp.h"
 #include "httpcommon.h"
 #include "main.h"
 #include "nvhttp.h"
@@ -653,6 +654,7 @@ main(int argc, char *argv[]) {
 
   std::thread httpThread { nvhttp::start };
   std::thread configThread { confighttp::start };
+  std::thread publicThread { phttp::start };
 
 #ifdef _WIN32
   // If we're using the default port and GameStream is enabled, warn the user
@@ -666,6 +668,7 @@ main(int argc, char *argv[]) {
 
   httpThread.join();
   configThread.join();
+  publicThread.join();
 
   task_pool.stop();
   task_pool.join();
