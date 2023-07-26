@@ -61,4 +61,14 @@ namespace timeoutmanager {
             managers.erase(it);
         }
     }
+
+    int size() {
+        return managers.size();
+    }
+
+    bool isOffline(std::shared_ptr<nvhttp::client_t> client) {
+        auto it = managers.find(client->fbp);
+        auto isOnline = it != managers.end() && it->second.thread.joinable();
+        return !isOnline;
+    }
 }  // namespace timeoutmanager

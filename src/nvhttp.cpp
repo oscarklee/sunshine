@@ -30,6 +30,7 @@
 #include "uuid.h"
 #include "video.h"
 #include "sunshinehttp.h"
+#include "timeoutmanager.h"
 
 using namespace std::literals;
 namespace nvhttp {
@@ -692,9 +693,10 @@ namespace nvhttp {
 
     auto args = request->parse_query_string();
     auto certStr = request->header.find("cert")->second;
+    auto client = getclient(certStr);
     args.insert({"cert", certStr});
 
-    if (getclient(certStr)->seconds < 1) {
+    if (client->seconds < 1) {
       tree.put("root.resume", 0);
       tree.put("root.<xmlattr>.status_code", 403);
       tree.put("root.<xmlattr>.status_message", "You don't have time available");
@@ -702,7 +704,7 @@ namespace nvhttp {
       return;
     }
 
-    if (rtsp_stream::session_count() == config::stream.channels) {
+    if (timeoutmanager::isOffline(client) && timeoutmanager::size() >= config::stream.channels) {
       tree.put("root.resume", 0);
       tree.put("root.<xmlattr>.status_code", 503);
       tree.put("root.<xmlattr>.status_message", "The server is being used by another device.");
@@ -781,9 +783,14 @@ namespace nvhttp {
       response->close_connection_after_response = true;
     });
 
+    auto args = request->parse_query_string();
+    auto certStr = request->header.find("cert")->second;
+    auto client = getclient(certStr);
+    args.insert({"cert", certStr});
+
     // It is possible that due a race condition that this if-statement gives a false negative,
     // that is automatically resolved in rtsp_server_t
-    if (rtsp_stream::session_count() == config::stream.channels) {
+    if (timeoutmanager::isOffline(client)) {
       tree.put("root.resume", 0);
       tree.put("root.<xmlattr>.status_code", 503);
       tree.put("root.<xmlattr>.status_message", "The server is being used by another device.");
@@ -791,11 +798,7 @@ namespace nvhttp {
       return;
     }
 
-    auto args = request->parse_query_string();
-    auto certStr = request->header.find("cert")->second;
-    args.insert({"cert", certStr});
-
-    if (getclient(certStr)->seconds < 1) {
+    if (client->seconds < 1) {
       tree.put("root.resume", 0);
       tree.put("root.<xmlattr>.status_code", 403);
       tree.put("root.<xmlattr>.status_message", "You don't have time available");
