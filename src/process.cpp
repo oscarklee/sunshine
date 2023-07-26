@@ -100,8 +100,18 @@ namespace proc {
     return cmd_path.parent_path();
   }
 
+  std::string
+  replace(std::string cmd, std::string keyword, std::string replacement) {
+    size_t pos = cmd.find(keyword);
+    if (pos != std::string::npos) {
+        cmd.replace(pos, keyword.length(), replacement);
+    }
+
+    return cmd;
+  }
+
   int
-  proc_t::execute(int app_id) {
+  proc_t::execute(int app_id, std::string fbp) {
     // Ensure starting from a clean slate
     terminate();
 
@@ -150,14 +160,15 @@ namespace proc {
         continue;
       }
 
+      auto do_cmd = replace(cmd.do_cmd, "{{fbp}}", fbp);
       boost::filesystem::path working_dir = _app.working_dir.empty() ?
-                                              find_working_directory(cmd.do_cmd, _env) :
+                                              find_working_directory(do_cmd, _env) :
                                               boost::filesystem::path(_app.working_dir);
-      BOOST_LOG(info) << "Executing Do Cmd: ["sv << cmd.do_cmd << ']';
-      auto child = platf::run_command(cmd.elevated, true, cmd.do_cmd, working_dir, _env, _pipe.get(), ec, nullptr);
+      BOOST_LOG(info) << "Executing Do Cmd: ["sv << do_cmd << ']';
+      auto child = platf::run_command(cmd.elevated, true, do_cmd, working_dir, _env, _pipe.get(), ec, nullptr);
 
       if (ec) {
-        BOOST_LOG(error) << "Couldn't run ["sv << cmd.do_cmd << "]: System: "sv << ec.message();
+        BOOST_LOG(error) << "Couldn't run ["sv << do_cmd << "]: System: "sv << ec.message();
         return -1;
       }
 
@@ -165,7 +176,7 @@ namespace proc {
       auto ret = child.exit_code();
 
       if (ret != 0) {
-        BOOST_LOG(error) << '[' << cmd.do_cmd << "] failed with code ["sv << ret << ']';
+        BOOST_LOG(error) << '[' << do_cmd << "] failed with code ["sv << ret << ']';
         return -1;
       }
     }

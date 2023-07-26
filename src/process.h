@@ -65,7 +65,7 @@ namespace proc {
         _apps(std::move(apps)) {}
 
     int
-    execute(int app_id);
+    execute(int app_id, std::string fbp);
 
     /**
      * @return _app_id if a process is running, otherwise returns 0

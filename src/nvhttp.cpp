@@ -748,7 +748,9 @@ namespace nvhttp {
     }
 
     if (appid > 0) {
-      auto err = proc::proc.execute(appid);
+      auto certStr = request->header.find("cert")->second;
+      auto client = getclient(certStr);
+      auto err = proc::proc.execute(appid, client->fbp);
       if (err) {
         tree.put("root.<xmlattr>.status_code", err);
         tree.put("root.<xmlattr>.status_message", "Failed to start the specified application");
