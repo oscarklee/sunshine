@@ -229,9 +229,9 @@ namespace rtsp_stream {
     rtsp_server_t() {
       // Verify client's time to save the state and quit session if it is consumed.
       timeoutmanager::timeoutmanager_t::on_time_decrease = [this](std::shared_ptr<nvhttp::client_t> client) {
-        BOOST_LOG(info) << "CLIENT FBP :: " << client->fbp << "CLIENT SECONDS :: " << client->seconds;
         if (client->seconds < 1) {
           clear(true);
+          timeoutmanager::clear(client);
           if (proc::proc.running() > 0) {
             proc::proc.terminate();
           }
@@ -239,6 +239,19 @@ namespace rtsp_stream {
 
         if (client->seconds % 60 == 0) {
           nvhttp::save_state();
+        }
+      };
+
+      // Verify time paused and quit session if it is taking so long.
+      timeoutmanager::timeoutmanager_t::on_pause_time = [this](std::shared_ptr<nvhttp::client_t> client, int pause_time) {
+        if (pause_time > 60) {
+          clear(true);
+          timeoutmanager::clear(client);
+          if (proc::proc.running() > 0) {
+            proc::proc.terminate();
+          }
+        } else if (proc::proc.running() == 0) {
+          timeoutmanager::clear(client);
         }
       };
     }

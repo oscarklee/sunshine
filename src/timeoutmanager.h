@@ -13,12 +13,14 @@
 namespace timeoutmanager {
     struct timeoutmanager_t {
         static std::function<void(std::shared_ptr<nvhttp::client_t>)> on_time_decrease;
+        static std::function<void(std::shared_ptr<nvhttp::client_t>, int)> on_pause_time;
         std::shared_ptr<nvhttp::client_t> client;
         std::thread thread;
         std::atomic<bool>* pause;
+        std::atomic<bool>* stop;
 
-        timeoutmanager_t(std::shared_ptr<nvhttp::client_t> client, std::thread thread, std::atomic<bool>* pause)
-            : client(client), thread(std::move(thread)), pause(pause) {}
+        timeoutmanager_t(std::shared_ptr<nvhttp::client_t> client, std::thread thread, std::atomic<bool>* pause, std::atomic<bool>* stop)
+            : client(client), thread(std::move(thread)), pause(pause), stop(stop) {}
     };
     
     // functions
@@ -26,4 +28,6 @@ namespace timeoutmanager {
     start(std::shared_ptr<nvhttp::client_t> client);
     void
     stop(std::shared_ptr<nvhttp::client_t> client);
+    void
+    clear(std::shared_ptr<nvhttp::client_t> client);
 }
